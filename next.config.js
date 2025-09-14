@@ -13,8 +13,8 @@ const nextConfig = {
       return [
         {
           source: '/api/:path*',
-          destination: 'http://localhost:7050/api/:path*',
-          // destination: 'http://198.46.253.210:7050/api/:path*',
+          //destination: 'http://localhost:7050/api/:path*',
+          destination: 'http://198.46.253.210:7050/api/:path*',
         },
         {
           source: '/ext/:path*',
