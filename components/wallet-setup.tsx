@@ -252,7 +252,6 @@ export function WalletSetup({ onWalletCreated }: WalletSetupProps) {
 
     try {
       const decryptedWallet = decryptWallet(uploadedWalletEncrypted, password)
-      console.log(decryptedWallet, uploadedWalletEncrypted)
 
       if (!decryptedWallet.isSuccess) {
         toast({
@@ -300,8 +299,6 @@ export function WalletSetup({ onWalletCreated }: WalletSetupProps) {
   }
 
   const copyToClipboard = (text: string) => {
-    console.log(text)
-
     navigator.clipboard.writeText(text)
     toast({
       title: 'Copied to Clipboard',

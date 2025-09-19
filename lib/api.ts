@@ -96,9 +96,6 @@ export function getScantxoutsetApi(address: string, debounceMs: number = 300): P
     // 设置新的防抖定时器
     const timer = setTimeout(async () => {
       try {
-        // const result = await axiosTool.post<RpcRes<Scantxoutset>>('/rpc/scantxoutset', {
-        //   address
-        // })
         const result = await axiosTool.get<RpcRes<Scantxoutset>>(`/address/${address}/utxos`, {})
         debounceTimers.delete(key)
         resolve(result)
@@ -221,6 +218,43 @@ export function getTransactionApi(txid: string, debounceMs: number = 300): Promi
         resolve(result)
       } catch (error) {
         // 请求失败时清理防抖定时器
+        debounceTimers.delete(key)
+        reject(error)
+      }
+    }, debounceMs)
+
+    debounceTimers.set(key, timer)
+  })
+}
+
+/** 构建裸签名
+ *
+ */
+export function createRawTransactionApi(
+  inputs: {
+    txid: string
+    vout: number
+  }[],
+  outputs: { [address: string]: string },
+  debounceMs: number = 300
+): Promise<ApiData<RpcRes<{ rawTxHex: string }>>> {
+  const key = `createRawTransactionApi_${inputs[0].txid}_${Object.keys(outputs)[0]}`
+
+  return new Promise((resolve, reject) => {
+    // 清除之前的定时器
+    if (debounceTimers.has(key)) {
+      clearTimeout(debounceTimers.get(key)!)
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const result = await axiosTool.post<RpcRes<{ rawTxHex: string }>>('/address/createrawtransaction', {
+          inputs,
+          outputs
+        })
+        debounceTimers.delete(key)
+        resolve(result)
+      } catch (error) {
         debounceTimers.delete(key)
         reject(error)
       }

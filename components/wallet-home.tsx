@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { useLanguage } from '@/contexts/language-context'
 import { ArrowDown, ArrowUp, ArrowUpDown, Menu, Bell, Settings, Clock, X, Database } from 'lucide-react'
-import { calcValue, formatDate, NAME_TOKEN, onOpenExplorer } from '@/lib/utils'
+import { calcValue, decryptWallet, formatDate, NAME_TOKEN, onOpenExplorer } from '@/lib/utils'
 import { PendingTransaction, Transaction, useWalletActions, useWalletState } from '@/stores/wallet-store'
 import { AddressTxsExt, getAddressTxsExtApi } from '@/lib/externalApi'
 import Decimal from 'decimal.js'
@@ -32,6 +32,7 @@ export function WalletHome({ onNavigate }: WalletHomeProps) {
       const res = await getAddressTxsExtApi(wallet.address)
       if (!res.data.data) return
 
+      let txs: Transaction[] = []
       for (const tx of res.data.data.reverse()) {
         let txInfo: Transaction
         const unspentTx = unspent.find((item) => item.txid === tx[1])
@@ -64,7 +65,11 @@ export function WalletHome({ onNavigate }: WalletHomeProps) {
             height: 0
           }
         }
-        addTransaction(txInfo)
+        txs.push(txInfo)
+      }
+
+      for (const tx of txs) {
+        addTransaction(tx)
       }
     } catch (error) {
       console.log(error, 'error')
@@ -117,53 +122,62 @@ export function WalletHome({ onNavigate }: WalletHomeProps) {
   }
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      getTxs()
-    }, 1000 * 22)
-    return () => clearInterval(interval)
-  })
-
-  useEffect(() => {
     getTxs()
     getPendingTxs()
     onLoginExpired()
+
+    let interval: NodeJS.Timeout | null = null
+    if (unspent.length > 0) {
+      interval = setInterval(() => {
+        getTxs()
+      }, 22 * 1000)
+    }
+
+    // 清理函数，防止内存泄漏
+    return () => {
+      if (interval) {
+        clearInterval(interval)
+      }
+    }
   }, [wallet.balance, unspent])
 
   return (
     <>
       {/* Fixed Header */}
       <div className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-gray-900/95 via-yellow-900/20 to-gray-900/95 backdrop-blur-md border-b border-yellow-500/30 shadow-2xl">
-        <div className="flex justify-between items-center p-4">
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <img
-                src="/logo.jpg"
-                alt="TRUMP Logo"
-                className="w-10 h-10 rounded-full border-2 border-yellow-400/70 shadow-lg trump-pulse"
-              />
-              <div className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-400 rounded-full border-2 border-gray-900 animate-pulse"></div>
-              <div className="absolute inset-0 rounded-full bg-yellow-400/20 animate-ping"></div>
+        <div className="max-w-md mx-auto">
+          <div className="flex justify-between items-center p-4">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <img
+                  src="/logo.jpg"
+                  alt="TRUMP Logo"
+                  className="w-10 h-10 rounded-full border-2 border-yellow-400/70 shadow-lg trump-pulse"
+                />
+                <div className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-400 rounded-full border-2 border-gray-900 animate-pulse"></div>
+                <div className="absolute inset-0 rounded-full bg-yellow-400/20 animate-ping"></div>
+              </div>
+              <div>
+                <h1 className="text-xl font-bold bg-gradient-to-r from-yellow-400 via-yellow-300 to-yellow-500 bg-clip-text text-transparent meme-text">
+                  {t('wallet.title')}
+                </h1>
+                <div className="text-xs text-yellow-400/80 meme-text">{t('wallet.subtitle')}</div>
+              </div>
             </div>
-            <div>
-              <h1 className="text-xl font-bold bg-gradient-to-r from-yellow-400 via-yellow-300 to-yellow-500 bg-clip-text text-transparent meme-text">
-                {t('wallet.title')}
-              </h1>
-              <div className="text-xs text-yellow-400/80 meme-text">{t('wallet.subtitle')}</div>
+            <div className="flex items-center gap-3">
+              <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-3 py-1.5 trump-glow">
+                <div className="text-yellow-400 text-xs font-medium meme-text">{t('wallet.blockHeight')}</div>
+                <div className="text-white text-sm font-semibold">{blockchainInfo.headers.toLocaleString()}</div>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-yellow-300 hover:text-yellow-100 hover:bg-yellow-500/20 transition-all duration-300 trump-button-hover"
+                onClick={() => onNavigate('settings')}
+              >
+                <Settings className="h-5 w-5" />
+              </Button>
             </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-3 py-1.5 trump-glow">
-              <div className="text-yellow-400 text-xs font-medium meme-text">{t('wallet.blockHeight')}</div>
-              <div className="text-white text-sm font-semibold">{blockchainInfo.headers.toLocaleString()}</div>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-yellow-300 hover:text-yellow-100 hover:bg-yellow-500/20 transition-all duration-300 trump-button-hover"
-              onClick={() => onNavigate('settings')}
-            >
-              <Settings className="h-5 w-5" />
-            </Button>
           </div>
         </div>
       </div>
@@ -479,7 +493,7 @@ export function WalletHome({ onNavigate }: WalletHomeProps) {
                       <span className="text-yellow-400/70 text-sm">{formatDate(tx.timestamp, 'MM-DD HH:mm:ss')}</span>
                       {tx.status === 'pending' && (
                         <span className="text-orange-400 text-xs ml-5 whitespace-nowrap">
-                          ⏳ {t('transactions.confirmations')}: {confirmations} / {blockchainInfo.headers - tx.height}
+                          ⏳ {t('transactions.confirmations')}: {blockchainInfo.headers - tx.height} / {confirmations}
                         </span>
                       )}
                       {tx.status === 'confirmed' && <span className="text-green-400 text-xs ml-5">✅</span>}

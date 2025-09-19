@@ -3,10 +3,12 @@ import { twMerge } from 'tailwind-merge'
 import { decryptAES, encryptAES, hexToString, MD5, stringToHex } from './cryoto'
 import Decimal from 'decimal.js'
 import { bech32 } from 'bech32'
+
 import * as bitcoin from 'bitcoinjs-lib'
-import { getTransactionApi, Unspent } from './api'
+import { createRawTransactionApi, getTransactionApi, Unspent } from './api'
 import { BIP32Interface } from 'bip32'
 import dayjs from 'dayjs'
+import SafeTransactionSigner, { UTXO } from './SafeTransactionSigner'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -16,27 +18,38 @@ export function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-export const VERSION = '1.0'
+export const VERSION = '1.2'
 
 export const NAME_TOKEN = 'TRMP'
 
 export const TRUMPOW_NETWORK = {
   messagePrefix: '\x18TrumPOW Signed Message:\n',
-  // bech32 属性对于非 SegWit 币种不应被使用，最好移除或忽略
   bech32: 'trmp',
   bip32: {
-    public: 0x02fadafe, // ✅ 正确的值
-    private: 0x02fac495 // 这个值之前是正确的
+    public: 0x02fadafe,
+    private: 0x02fac495
   },
-  pubKeyHash: 0x41, // 65 -> 对应地址开头的 'T'
-  scriptHash: 0x1c, // 28
-  wif: 0x97 // 151
+  pubKeyHash: 0x41,
+  scriptHash: 0x1c,
+  wif: 0x97
 }
+
+// export const TRUMPOW_NETWORK = {
+//   messagePrefix: '\x18TrumPOW Signed Message:\n', // 可以保持自定义
+//   bech32: 'trmp', // 可以保持自定义 (用于SegWit)
+//   bip32: {
+//     public: 0x043587cf, // Testnet/Regtest 标准 xpub 版本号
+//     private: 0x04358394 // Testnet/Regtest 标准 xprv 版本号
+//   },
+//   pubKeyHash: 0x6f, // <-- 核心修改：111 (十进制)，生成 m/n/k 开头的地址
+//   scriptHash: 0xc4, // <-- 对应修改：196 (十进制)，生成 '2' 开头的地址
+//   wif: 0xef // <-- 对应修改：239 (十进制)，pubKeyHash + 128
+// }
 
 export const TRUMPOW_PATH = "m/44'/3'/0'/0/0"
 
-export const explorerUrl1 = 'https://explorer-1.trumpow.meme/'
-export const explorerUrl2 = 'https://explorer-1.trumpow.meme/'
+export const explorerUrl1 = 'https://explorer.trumpow.meme/'
+export const explorerUrl2 = 'https://explorer.trumpow.meme/'
 
 export function onOpenExplorer(network: string, type: string, id: string) {
   if (network === '1') {
@@ -50,45 +63,45 @@ export const ARR_FEE_ADDRESS = 'TE1WqowKDtoAb8PwQr4LgHArbvVPSH83JE'
 // app 手续费收取标准
 export const APP_FEE_ARR = [
   {
-    min: 0,
-    max: 1,
+    lt: 1,
     fee: 0.01
   },
   {
-    min: 1,
-    max: 50,
+    lt: 50,
     fee: 0.1
   },
   {
-    min: 50,
-    max: 500,
+    lt: 500,
     fee: 3
   },
   {
-    min: 500,
-    max: 5000,
+    lt: 5000,
     fee: 30
   },
   {
-    min: 5000,
-    max: 10000,
+    lt: 10000,
     fee: 300
   },
   {
-    min: 10000,
-    max: 10000000,
+    lt: 20000000,
     fee: 2000
   },
   {
-    min: 10000000,
-    max: Number.MAX_SAFE_INTEGER,
+    lt: 100000000,
     fee: 8000
+  },
+  {
+    gt: 100000000,
+    fee: 10000
   }
 ]
 export function calcAppFee(amount: string | number) {
   const amountDecimal = new Decimal(amount)
   for (const item of APP_FEE_ARR) {
-    if (amountDecimal.gte(item.min) && amountDecimal.lt(item.max)) {
+    if (item.lt && amountDecimal.lte(item.lt)) {
+      return item.fee
+    }
+    if (item.gt && amountDecimal.gt(item.gt)) {
       return item.fee
     }
   }
@@ -196,6 +209,8 @@ export function isValidTrumpowAddress(address: string): boolean {
     //    b. 地址的版本字节与 TRUMPOW_NETWORK.pubKeyHash (65) 或 scriptHash (28) 匹配。
     return true
   } catch (error) {
+    console.log(error)
+
     // 3. 如果解码过程中发生任何错误（例如，校验和错误、版本不匹配、格式无效），
     //    库会抛出一个异常。我们捕获这个异常并返回 false。
     // console.error(`地址验证失败: ${address}`, error.message);
@@ -230,7 +245,7 @@ export async function signTransaction(
   outputs: { address: string; amount: string }[],
   feeRate: number,
   myAddress: string,
-  child: BIP32Interface,
+  seed: Buffer,
   appFee: number
 ) {
   // 计算手续费
@@ -241,12 +256,8 @@ export async function signTransaction(
 
   // 计算总输入金额
   const totalInput = utxos.reduce((acc, utxo) => acc.plus(utxo.amount), new Decimal(0))
-
   // 计算总输出金额
   const totalOutput = outputs.reduce((acc, output) => acc.plus(output.amount), new Decimal(0))
-
-  // === 构建交易 ===
-  const psbt = new bitcoin.Psbt({ network: TRUMPOW_NETWORK })
 
   console.log('utxos', utxos)
   console.log('outputs', outputs)
@@ -255,58 +266,52 @@ export async function signTransaction(
   console.log('networkFee', networkFee)
   console.log('totalInput', totalInput.toString(), 'totalOutput', totalOutput.toString())
 
-  for (const utxo of utxos) {
-    const res = await getTransactionApi(utxo.txid)
-    console.log(res)
+  const addInput = [] as UTXO[]
 
-    psbt.addInput({
-      hash: utxo.txid,
-      index: utxo.vout,
-      nonWitnessUtxo: Buffer.from(res.data.rpcData, 'hex')
+  for (const utxo of utxos) {
+    addInput.push({
+      txid: utxo.txid,
+      vout: utxo.vout
     })
   }
 
+  const addOutput = {} as { [address: string]: string }
   outputs.forEach((output) => {
-    psbt.addOutput({
-      address: output.address,
-      value: scashToSat(output.amount)
-    })
+    addOutput[output.address] = output.amount
   })
+
   if (appFee) {
-    psbt.addOutput({
-      address: ARR_FEE_ADDRESS,
-      value: scashToSat(appFee)
-    })
+    console.log('app手续费', appFee)
+    addOutput[ARR_FEE_ADDRESS] = appFee.toString()
   }
 
   // 计算找零金额
   const change = totalInput.minus(totalOutput).minus(feeRate)
-  console.log('change', change.toString())
-
+  console.log('零金额', change.toString())
   if (change.gt(0)) {
-    psbt.addOutput({
-      address: myAddress,
-      value: scashToSat(change.toString())
-    })
+    addOutput[myAddress] = change.toString()
   }
 
-  const publicKeyBuffer = Buffer.isBuffer(child.publicKey) ? child.publicKey : Buffer.from(child.publicKey)
   try {
-    const customSigner = {
-      publicKey: publicKeyBuffer,
-      sign: (hash: Buffer) => {
-        const signature = child.sign(hash)
-        // 确保返回Buffer类型
-        return Buffer.isBuffer(signature) ? signature : Buffer.from(signature)
-      }
-    }
+    console.log('开始构建裸签名')
+    const res = await createRawTransactionApi(addInput, addOutput)
+    console.log(res)
 
-    utxos.forEach((_, idx) => {
-      psbt.signInput(idx, customSigner)
-    })
-    psbt.finalizeAllInputs()
+    console.log('开始本地签名')
+    const signer = new SafeTransactionSigner(seed, TRUMPOW_NETWORK, TRUMPOW_PATH)
+    const signedTxHex = await signer.signRawTransaction(res.data.rpcData.rawTxHex, utxos)
+
+    return {
+      isSuccess: true,
+      rawtx: signedTxHex,
+      totalInput,
+      totalOutput,
+      change,
+      feeRate,
+      appFee
+    }
   } catch (error) {
-    console.log('签名失败', error)
+    console.log('构建裸签名失败', error)
     return {
       isSuccess: false,
       rawtx: '',
@@ -316,18 +321,6 @@ export async function signTransaction(
       feeRate,
       appFee
     }
-  }
-
-  const rawtx = psbt.extractTransaction().toHex()
-
-  return {
-    isSuccess: true,
-    rawtx,
-    totalInput,
-    totalOutput,
-    change,
-    feeRate,
-    appFee
   }
 }
 

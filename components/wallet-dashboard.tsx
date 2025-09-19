@@ -110,36 +110,38 @@ export function WalletDashboard({ onLogout }: WalletDashboardProps) {
       <div className="absolute bottom-32 left-16 text-xl opacity-10 trump-float" style={{animationDelay: '1.5s'}}>👑</div>
       {currentView !== 'home' && (
           <div className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-gray-900/95 via-yellow-900/20 to-gray-900/95 backdrop-blur-md border-b border-yellow-500/30 shadow-2xl">
-            <div className="flex justify-between items-center p-4">
-              <div className="flex items-center gap-3">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-yellow-300 hover:text-yellow-100 hover:bg-yellow-500/20 transition-all duration-300 trump-button-hover"
-                  onClick={() => handleNavigation('home')}
-                >
-                  <ArrowLeft className="h-5 w-5" />
-                </Button>
-                <div className="relative">
-                  <img src="/logo.jpg" alt="TRUMP Logo" className="w-10 h-10 rounded-full border-2 border-yellow-400/70 shadow-lg trump-pulse" />
-                  <div className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-400 rounded-full border-2 border-gray-900 animate-pulse"></div>
-                  <div className="absolute inset-0 rounded-full bg-yellow-400/20 animate-ping"></div>
+            <div className="max-w-md mx-auto">
+              <div className="flex justify-between items-center p-4">
+                <div className="flex items-center gap-3">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-yellow-300 hover:text-yellow-100 hover:bg-yellow-500/20 transition-all duration-300 trump-button-hover"
+                    onClick={() => handleNavigation('home')}
+                  >
+                    <ArrowLeft className="h-5 w-5" />
+                  </Button>
+                  <div className="relative">
+                    <img src="/logo.jpg" alt="TRUMP Logo" className="w-10 h-10 rounded-full border-2 border-yellow-400/70 shadow-lg trump-pulse" />
+                    <div className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-400 rounded-full border-2 border-gray-900 animate-pulse"></div>
+                    <div className="absolute inset-0 rounded-full bg-yellow-400/20 animate-ping"></div>
+                  </div>
+                  <div>
+                    <h1 className="text-xl font-bold bg-gradient-to-r from-yellow-400 via-yellow-300 to-yellow-500 bg-clip-text text-transparent meme-text">
+                      {currentView === 'receive' && `📥 ${t('receive.title')}`}
+                      {currentView === 'send' && `📤 ${t('action.send')}`}
+                      {currentView === 'assets' && `💎 ${t('nav.assets')}`}
+                      {currentView === 'settings' && `⚙️ ${t('settings.title')}`}
+                      {['buy', 'sell', 'trade'].includes(currentView) &&
+                        (currentView === 'buy' ? '💰 购买' : currentView === 'sell' ? '💸 出售' : '🔄 交易')}
+                    </h1>
+                    <div className="text-xs text-yellow-400/80 meme-text">{t('common.walletFunction')} </div>
+                  </div>
                 </div>
-                <div>
-                  <h1 className="text-xl font-bold bg-gradient-to-r from-yellow-400 via-yellow-300 to-yellow-500 bg-clip-text text-transparent meme-text">
-                    {currentView === 'receive' && `📥 ${t('receive.title')}`}
-                    {currentView === 'send' && `📤 ${t('action.send')}`}
-                    {currentView === 'assets' && `💎 ${t('nav.assets')}`}
-                    {currentView === 'settings' && `⚙️ ${t('settings.title')}`}
-                    {['buy', 'sell', 'trade'].includes(currentView) &&
-                      (currentView === 'buy' ? '💰 购买' : currentView === 'sell' ? '💸 出售' : '🔄 交易')}
-                  </h1>
-                  <div className="text-xs text-yellow-400/80 meme-text">{t('common.walletFunction')} </div>
+                <div className="flex items-center gap-3">
+              
+                  <LanguageSelector />
                 </div>
-              </div>
-              <div className="flex items-center gap-3">
-            
-                <LanguageSelector />
               </div>
             </div>
           </div>

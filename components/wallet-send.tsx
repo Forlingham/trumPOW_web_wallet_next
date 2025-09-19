@@ -1,13 +1,5 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { useLanguage } from '@/contexts/language-context'
-import { ArrowUpDown, X, QrCode, ChevronRight, ArrowLeft, Lock, ExternalLink } from 'lucide-react'
-import { Checkbox } from '@/components/ui/checkbox'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,27 +11,31 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger
 } from '@/components/ui/alert-dialog'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { useLanguage } from '@/contexts/language-context'
 import { useToast } from '@/hooks/use-toast'
+import { onBroadcastApi, Unspent } from '@/lib/api'
 import {
   calcAppFee,
   calcFee,
   calcValue,
   decryptWallet,
   hideString,
-  NAME_TOKEN,
-  TRUMPOW_NETWORK,
-  signTransaction,
   isValidTrumpowAddress,
+  NAME_TOKEN,
   onOpenExplorer,
-  sleep,
-  TRUMPOW_PATH
+  signTransaction,
+  sleep
 } from '@/lib/utils'
 import { PendingTransaction, useWalletActions, useWalletState } from '@/stores/wallet-store'
-import { getBaseFeeApi, getScantxoutsetApi, onBroadcastApi, Unspent } from '@/lib/api'
-import Decimal from 'decimal.js'
 import * as bip39 from 'bip39'
-import { BIP32Factory } from 'bip32'
-import * as ecc from 'tiny-secp256k1'
+import Decimal from 'decimal.js'
+import { ArrowUpDown, ChevronRight, ExternalLink, Lock, QrCode, X } from 'lucide-react'
+import { useEffect, useState } from 'react'
 
 interface WalletSendProps {
   onNavigate: (view: string) => void
@@ -206,9 +202,13 @@ export function WalletSend({ onNavigate }: WalletSendProps) {
     // 计算需要多少个输入才能满足发送的金额
     let pickAmount = new Decimal(0)
     const pickUnspentsArr: Unspent[] = []
-    console.log(unspent, 'unspent')
 
-    for (const unspentItem of unspent) {
+    // 排序，区块小的排前面
+    const unspent_ = [...unspent].sort((a, b) => a.height - b.height)
+    console.log(unspent_, 'unspent')
+
+    // 倒序遍历未花费的输出
+    for (const unspentItem of unspent_) {
       if (unspentItem.isHasMemPool || !unspentItem.isUsable) {
         continue
       }
@@ -330,14 +330,9 @@ export function WalletSend({ onNavigate }: WalletSendProps) {
       return
     }
 
-    const bip2 = BIP32Factory(ecc)
     const seed = bip39.mnemonicToSeedSync(walletObj.wallet.mnemonic)
-    const root = bip2.fromSeed(seed, TRUMPOW_NETWORK)
-    const path = TRUMPOW_PATH
-    const child = root.derivePath(path)
-
     try {
-      const signTransactionResult = await signTransaction(pickUnspents, sendListConfirm, networkFee, wallet.address, child, appFee)
+      const signTransactionResult = await signTransaction(pickUnspents, sendListConfirm, networkFee, wallet.address, seed, appFee)
       if (!signTransactionResult.isSuccess) {
         toast({
           title: '签名失败',
@@ -397,7 +392,7 @@ export function WalletSend({ onNavigate }: WalletSendProps) {
       console.log(error)
       toast({
         title: t('send.error'),
-        description: t('send.broadcast'),
+        description: t('send.errorInfo'),
         variant: 'destructive'
       })
     } finally {

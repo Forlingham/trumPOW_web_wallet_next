@@ -67,8 +67,7 @@ interface WalletState {
   updateBalance: (balance: number) => void
   addTransaction: (transaction: Transaction) => void
   addPendingTransaction: (transaction: PendingTransaction) => void
-  setUnspent: (unspent: Unspent[]) => void
-  deleteUnspent: (txid: string) => void
+  setUnspent: (unspent: Unspent) => void
   lockWallet: () => void
   unlockWallet: (password: string) => boolean
   clearWallet: () => void
@@ -183,22 +182,14 @@ export const useWalletStore = create<WalletState>()(
         })
       },
 
-      setUnspent: (unspent: Unspent[]) => {
+      setUnspent: (unspent: Unspent) => {
         set((state) => {
-          unspent.forEach((item) => {
-            const existingTransaction = state.unspent.find((tx) => tx.txid === item.txid)
-            if (existingTransaction) {
-              Object.assign(existingTransaction, item)
-            } else {
-              state.unspent.push(item)
-            }
-          })
-          // state.unspent = unspent
-        })
-      },
-      deleteUnspent: (txid: string) => {
-        set((state) => {
-          state.unspent = state.unspent.filter((item) => item.txid !== txid)
+          const existingTransaction = state.unspent.find((tx) => tx.txid === unspent.txid)
+          if (existingTransaction) {
+            Object.assign(existingTransaction, unspent)
+          } else {
+            state.unspent.push(unspent)
+          }
         })
       },
 
@@ -209,8 +200,6 @@ export const useWalletStore = create<WalletState>()(
       },
 
       unlockWallet: (password: string) => {
-        // 这里应该实现密码验证逻辑
-        // 暂时简单返回 true
         if (!password) {
           return false
         }
@@ -378,7 +367,10 @@ export const useWalletStore = create<WalletState>()(
               state.wallet.usableBalance = usableBalance.toNumber()
               state.wallet.lockBalance = lockBalance.toNumber()
             })
-            get().setUnspent(unspents)
+
+            for (const unspent of unspents) {
+              get().setUnspent(unspent)
+            }
           }
         } catch (error) {
           console.log('获取当前账号余额 错误：', error)

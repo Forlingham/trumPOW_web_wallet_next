@@ -87,7 +87,7 @@ const translations = {
     'transactions.sent': 'Sent',
     'transactions.memPool': 'Mem Pool',
     'transactions.particulars': 'View Dtls',
-    'transactions.confirmations': 'Confirm',
+    'transactions.confirmations': 'last',
 
     // Settings
     'settings.title': 'Settings',
